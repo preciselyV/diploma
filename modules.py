@@ -48,6 +48,7 @@ class Up(nn.Module):
 
     def forward(self, x, residual):
         x = self.tconv1(x)
+        # so yeah, main idea is that we want to have in_channels / out_channels == 2
         # thats why we upsample x4 then concat with residiual info and have x2.
         x = torch.cat([x, residual], dim=1)
         x = self.conv1(x)
