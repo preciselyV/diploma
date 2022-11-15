@@ -24,7 +24,7 @@ class Diffusion:
         rev_sqrt_a = torch.sqrt(1. - self.a_hat[t]).to(self.device)[:, None, None, None]
 
         noise = torch.randn_like(img)
-        return sqrt_a * img + rev_sqrt_a * noise
+        return sqrt_a * img + rev_sqrt_a * noise, noise
 
 
 def main():
@@ -39,7 +39,7 @@ def main():
     img, _ = next(iter(dl))
     img = img.to(device)
     t = torch.Tensor([1, 50, 100, 150, 200, 300, 600, 700, 999]).long().to(device)
-    noised = diffusion.noise_image(img, t)
+    noised, _ = diffusion.noise_image(img, t)
     save_image(noised.add(1).mul(0.5), args.save_path + "noise.jpg")
 
 
