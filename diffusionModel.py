@@ -1,10 +1,15 @@
+from argparse import ArgumentParser
+
 import torch
 import torch.nn as nn
+from torch.optim import Optimizer, Adam
 
 from tqdm import tqdm
+from torch.utils.data import DataLoader
 
 from models import UnetV1
 from diffusion import Diffusion
+from utils import prepare_dataset
 
 
 class DiffusionUNet:
@@ -54,9 +59,37 @@ class DiffusionUNet:
         noise = (noise * 255).type(torch.uint8)
         return noise
 
+    def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
+        for i in range(epochs):
+            print(f"epoch {i}")
+            for (img, _) in dataloader:
+                t = torch.randint(low=1, high=self.diffusion.steps, size=(dataloader.batch_size,))
+                t = t.to(self.device)
+
+                img = img.to(self.device)
+                imgs, noise = self.diffusion.noise_image(img, t)
+                predicted_noise = self.model(imgs)
+                loss = lossfunc(noise, predicted_noise)
+
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
+
+
+def main():
+    argparser = ArgumentParser()
+    argparser.add_argument("--dataset_path", default='images/')
+    args = argparser.parse_args()
+
+    diff = DiffusionUNet(device='cpu', img_size=80)
+    #noise = diff.sample_img(1)
+    #print(noise.dim())
+    mse = nn.MSELoss()
+    optim = Adam(diff.model.parameters(), lr=1e-4)
+    dl = prepare_dataset(args.dataset_path)
+    epochs = 2
+    diff.train(dataloader=dl, optim=optim, lossfunc=mse, epochs=epochs)
+
 
 if __name__ == '__main__':
-    diff = DiffusionUNet(device='cuda')
-    print(diff.diffusion.a.dim())
-    noise = diff.sample_img(1)
-    print(noise.shape)
+    main()
