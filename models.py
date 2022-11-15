@@ -4,9 +4,10 @@ from modules import Up, Down
 
 
 class UnetV1(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, channels: int):
         super(UnetV1, self).__init__()
 
+        self.channels = channels
         self.input = nn.Sequential(
             nn.Conv2d(in_channels=channels, out_channels=64, kernel_size=3, stride=1,
                       padding=1, bias=False),
