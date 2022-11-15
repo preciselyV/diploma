@@ -1,6 +1,6 @@
 FROM nvcr.io/nvidia/tensorrt:22.10-py3
 
-RUN pip3 install torch torchvision torchaudio pandas numpy scikit-learn
+RUN pip3 install torch torchvision torchaudio pandas numpy scikit-learn tqdm
 
 COPY . /diffusion-th
 
