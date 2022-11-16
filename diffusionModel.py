@@ -19,7 +19,7 @@ class DiffusionUNet:
         self.img_size = img_size
         self.device = device
         if model is None:
-            self.model = UnetV1(channels=3)
+            self.model = UnetV1(channels=3, device=self.device, time_dim=256)
         else:
             self.model = model
         self.model = self.model.to(self.device)
@@ -42,7 +42,7 @@ class DiffusionUNet:
                 # σ^2_t = β˜t = (1−α(t−1)/1−αt) * βt had similar results"
                 beta = self.diffusion.a_hat[t][:, None, None, None]
                 sigma = torch.sqrt(beta)
-                pred_noise = self.model(x_t)
+                pred_noise = self.model(x_t, t)
                 if ind > 1:
                     z = torch.randn_like(x_t)
                 else:
@@ -68,7 +68,7 @@ class DiffusionUNet:
 
                 img = img.to(self.device)
                 imgs, noise = self.diffusion.noise_image(img, t)
-                predicted_noise = self.model(imgs)
+                predicted_noise = self.model(imgs, t)
                 loss = lossfunc(noise, predicted_noise)
 
                 optim.zero_grad()
@@ -81,9 +81,9 @@ def main():
     argparser.add_argument("--dataset_path", default='images/')
     args = argparser.parse_args()
 
-    diff = DiffusionUNet(device='cpu', img_size=80)
-    #noise = diff.sample_img(1)
-    #print(noise.dim())
+    diff = DiffusionUNet(device='cuda', img_size=80)
+    noise = diff.sample_img(1)
+    print(noise.dim())
     mse = nn.MSELoss()
     optim = Adam(diff.model.parameters(), lr=1e-4)
     dl = prepare_dataset(args.dataset_path)
