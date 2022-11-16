@@ -1,13 +1,15 @@
 import torch
 import torch.nn as nn
-from modules import Up, Down
+from modules import UpEmb, DownEmb, SinPositionalEncoding
 
 
 class UnetV1(nn.Module):
-    def __init__(self, channels: int):
+    def __init__(self, channels: int, time_dim: int, device: str):
         super(UnetV1, self).__init__()
 
         self.channels = channels
+        self.device = device
+        self.time_dim = time_dim
         self.input = nn.Sequential(
             nn.Conv2d(in_channels=channels, out_channels=64, kernel_size=3, stride=1,
                       padding=1, bias=False),
@@ -17,15 +19,15 @@ class UnetV1(nn.Module):
             nn.ReLU(inplace=True)
         )
 
-        self.down1 = Down(in_channels=64, out_channels=128)
-        self.down2 = Down(in_channels=128, out_channels=256)
-        self.down3 = Down(in_channels=256, out_channels=512)
-        self.down4 = Down(in_channels=512, out_channels=1024)
+        self.down1 = DownEmb(in_channels=64, out_channels=128, time_dim=self.time_dim)
+        self.down2 = DownEmb(in_channels=128, out_channels=256, time_dim=self.time_dim)
+        self.down3 = DownEmb(in_channels=256, out_channels=512, time_dim=self.time_dim)
+        self.down4 = DownEmb(in_channels=512, out_channels=1024, time_dim=self.time_dim)
 
-        self.up1 = Up(in_channels=1024, out_channels=512)
-        self.up2 = Up(in_channels=512, out_channels=256)
-        self.up3 = Up(in_channels=256, out_channels=128)
-        self.up4 = Up(in_channels=128, out_channels=64)
+        self.up1 = UpEmb(in_channels=1024, out_channels=512, time_dim=self.time_dim)
+        self.up2 = UpEmb(in_channels=512, out_channels=256, time_dim=self.time_dim)
+        self.up3 = UpEmb(in_channels=256, out_channels=128, time_dim=self.time_dim)
+        self.up4 = UpEmb(in_channels=128, out_channels=64, time_dim=self.time_dim)
 
         self.output = nn.Sequential(
             nn.Conv2d(in_channels=64, out_channels=channels, kernel_size=3, stride=1,
@@ -35,30 +37,36 @@ class UnetV1(nn.Module):
                       padding=1, bias=False),
             nn.ReLU(inplace=True)
         )
+        self.encode = SinPositionalEncoding(time_dim=self.time_dim, device=self.device)
+        self.encode.requires_grad_(False)
 
-    def forward(self, x):
+    def forward(self, x, t):
+        t = t.unsqueeze(-1).type(torch.float)
+        t = self.encode(t)
         x1 = self.input(x)
-        x2 = self.down1(x1)
-        x3 = self.down2(x2)
-        x4 = self.down3(x3)
-        x5 = self.down4(x4)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
+        x2 = self.down1(x1, t)
+        x3 = self.down2(x2, t)
+        x4 = self.down3(x3, t)
+        x5 = self.down4(x4, t)
+        x = self.up1(x5, x4, t)
+        x = self.up2(x, x3, t)
+        x = self.up3(x, x2, t)
+        x = self.up4(x, x1, t)
         x = self.output(x)
         return x
 
 
 def main():
-    model = UnetV1(channels=3)
-    minibatch = torch.randn(3, 3, 1024, 1024)
+    model = UnetV1(channels=3, time_dim=256, device='cuda').to('cuda')
+    minibatch = torch.randn(3, 3, 128, 128).to('cuda')
+    ts = torch.tensor([228] * minibatch.shape[0], dtype=torch.long).to('cuda')
     model.eval()
     # yeah... OS is killing the process as it is drainig all of the
     # memory while dragging this derivative DUG. Gotta do it without
     # gradients :P
     with torch.no_grad():
-        res = model(minibatch)
+        res = model(minibatch, ts)
+        res = res.to('cpu')
         print(res.shape)
 
 
