@@ -25,6 +25,8 @@ class DiffusionUNet:
         self.model = self.model.to(self.device)
         if diffusion is None:
             self.diffusion = Diffusion(b_lower=1e-4, b_upper=0.02, steps=3, device=self.device)
+        else:
+            self.diffusion = diffusion
 
     # Algorithm 2 Sampling from DDPM
     def sample(self, amount: int) -> torch.Tensor:
@@ -77,14 +79,14 @@ class DiffusionUNet:
 
 
 def dry_run(cfg: dict):
-    diff = DiffusionUNet(device='cuda', img_size=80)
+    diff = DiffusionUNet(device=cfg['model']['device'], img_size=cfg['data']['image-size'])
     noise = diff.sample_img(1)
     print(noise.dim())
     mse = nn.MSELoss()
     optim = Adam(diff.model.parameters(), lr=1e-4)
     dl = prepare_dataset(dataset_path=cfg['data']['dataset-path'],
                          img_size=cfg['data']['image-size'],
-                         batch_size=cfg['data']['batch-size'])
+                         batch_size=1)
     epochs = 2
     diff.train(dataloader=dl, optim=optim, lossfunc=mse, epochs=epochs)
 
