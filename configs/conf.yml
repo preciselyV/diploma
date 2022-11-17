@@ -1,0 +1,20 @@
+data:
+  dataset-path: datasets/
+  save-result-images: true
+  result-images-path: results/images
+  checkpoints-path: results/checkpoints
+  image-size: 128
+  batch-size: 32
+
+model:
+  lr: 4e-03
+  timestep-embedding-dim: 256
+  device: 'cuda'
+  input-channels: 3
+  epochs: 100
+
+diffusion:
+  steps: 1000
+  beta_upper: 0.02
+  beta_lower: 1e-4
+  device: 'cuda'

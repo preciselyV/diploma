@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from models import UnetV1
 from diffusion import Diffusion
-from utils import prepare_dataset
+from utils import prepare_dataset, load_config
 
 
 class DiffusionUNet:
@@ -76,19 +76,57 @@ class DiffusionUNet:
                 optim.step()
 
 
-def main():
-    argparser = ArgumentParser()
-    argparser.add_argument("--dataset_path", default='images/')
-    args = argparser.parse_args()
-
+def dry_run(cfg: dict):
     diff = DiffusionUNet(device='cuda', img_size=80)
     noise = diff.sample_img(1)
     print(noise.dim())
     mse = nn.MSELoss()
     optim = Adam(diff.model.parameters(), lr=1e-4)
-    dl = prepare_dataset(args.dataset_path)
+    dl = prepare_dataset(dataset_path=cfg['data']['dataset-path'],
+                         img_size=cfg['data']['image-size'],
+                         batch_size=cfg['data']['batch-size'])
     epochs = 2
     diff.train(dataloader=dl, optim=optim, lossfunc=mse, epochs=epochs)
+
+
+def setup_model(model_args: dict):
+    model = UnetV1(channels=model_args['input-channels'],
+                   time_dim=model_args['timestep-embedding-dim'],
+                   device=model_args['device'])
+    return model
+
+
+def setup_diffusion(diffusion_args: dict):
+    diffusion = Diffusion(b_lower=diffusion_args['beta_lower'],
+                          b_upper=diffusion_args['beta_upper'],
+                          steps=diffusion_args['steps'],
+                          device=diffusion_args['device'])
+    return diffusion
+
+
+def main():
+    argparser = ArgumentParser()
+    argparser.add_argument('mode', choices=['dry-run', 'sample', 'train'])
+    argparser.add_argument("--config_path", default='configs/conf.yml')
+    args = argparser.parse_args()
+    cfg = load_config(args.config_path)
+    print(cfg)
+    if args.mode == 'train':
+        model = setup_model(cfg['model'])
+        diffusion = setup_diffusion(cfg['diffusion'])
+        dl = prepare_dataset(dataset_path=cfg['data']['dataset-path'],
+                             img_size=cfg['data']['image-size'],
+                             batch_size=cfg['data']['batch-size'])
+        diffusionModel = DiffusionUNet(model=model, diffusion=diffusion,
+                                       device=cfg['model']['device'],
+                                       img_size=cfg['data']['image-size'])
+        mse = nn.MSELoss()
+        optim = Adam(diffusionModel.model.parameters(),
+                     lr=cfg['model']['lr'])
+        diffusionModel.train(dataloader=dl, optim=optim, lossfunc=mse,
+                             epochs=cfg['model']['epochs'])
+    elif args.mode == 'dry-run':
+        dry_run(cfg)
 
 
 if __name__ == '__main__':
