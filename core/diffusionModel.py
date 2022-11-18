@@ -1,3 +1,4 @@
+import logging
 from argparse import ArgumentParser
 
 import torch
@@ -10,7 +11,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from models import UnetV1
 from diffusion import Diffusion
-from utils import setup_dataset, load_config, setup_writer, setup_diffusion, setup_model
+from utils import (setup_dataset, load_config, setup_writer, setup_diffusion, setup_model,
+                   setup_logging)
 
 
 class DiffusionUNet:
@@ -37,7 +39,8 @@ class DiffusionUNet:
             # this is the noise that we expect to convert to img
             # now t = T
             x_t = torch.randn((amount, self.model.channels, self.img_size, self.img_size))
-            for ind in tqdm(reversed(range(self.diffusion.steps))):
+            for ind in tqdm(reversed(range(self.diffusion.steps)), total=self.diffusion.steps,
+                            desc='sampling'):
                 x_t = x_t.to(self.device)
                 t = (torch.ones(amount) * ind).long().to(self.device)
                 alpha = self.diffusion.a[t][:, None, None, None]
@@ -65,9 +68,8 @@ class DiffusionUNet:
 
     def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
         for i in range(epochs):
-            print(f"epoch {i}")
             avg_loss = 0
-            for (img, _) in dataloader:
+            for (img, _) in tqdm(dataloader, desc='epoch Progress'):
                 t = torch.randint(low=1, high=self.diffusion.steps, size=(dataloader.batch_size,))
 
                 t = t.to(self.device)
@@ -81,7 +83,9 @@ class DiffusionUNet:
 
                 loss.backward()
                 optim.step()
-            self.writer.add_scalar('Loss/train', avg_loss / len(dataloader), i)
+            avg_loss /= len(dataloader)
+            logging.info(f'epoch {i} loss is {avg_loss}')
+            self.writer.add_scalar('Loss/train', avg_loss, i)
             sampled_imgs = self.sample(5).to('cpu')
             self.writer.add_images('generated_images', sampled_imgs, i)
 
@@ -129,10 +133,13 @@ def main():
     args = argparser.parse_args()
     cfg = load_config(args.config_path)
     cfg['run_name'] = args.name
-    print(cfg)
+    setup_logging(cfg)
+    logging.info(f'config:{cfg}')
     if args.mode == 'train':
+        logging.info('running in train mode')
         train(cfg)
     elif args.mode == 'dry-run':
+        logging.info('running in dry-run mode')
         dry_run(cfg)
 
 

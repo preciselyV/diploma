@@ -1,4 +1,5 @@
 import os
+import logging
 
 import torchvision
 from torch.utils.data import DataLoader
@@ -64,3 +65,10 @@ def setup_writer(cfg: dict):
     os.mkdir(path)
     tfwriter = SummaryWriter(log_dir=path)
     return tfwriter
+
+
+def setup_logging(cfg: dict):
+    logging.basicConfig(
+        level=cfg['logging']['log_level'],
+        format=cfg['logging']['log_format']
+    )
