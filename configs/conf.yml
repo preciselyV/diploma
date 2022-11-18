@@ -1,5 +1,5 @@
 data:
-  dataset-path: ./images  
+  dataset-path: ./images 
   save-result-images: true
   logs-path: results/logs
   checkpoints-path: results/checkpoints
