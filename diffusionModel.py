@@ -1,4 +1,3 @@
-import os
 from argparse import ArgumentParser
 
 import torch
@@ -11,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from models import UnetV1
 from diffusion import Diffusion
-from utils import prepare_dataset, load_config
+from utils import setup_dataset, load_config, setup_writer, setup_diffusion, setup_model
 
 
 class DiffusionUNet:
@@ -59,10 +58,10 @@ class DiffusionUNet:
         return x_t
 
     def sample_img(self, amount: int) -> torch.Tensor:
-        noise = self.sample(amount=amount)
-        noise = (noise.clamp(-1, 1) + 1) / 2
-        noise = (noise * 255).type(torch.uint8)
-        return noise
+        img = self.sample(amount=amount)
+        img = (img.clamp(-1, 1) + 1) / 2
+        img = (img * 255).type(torch.uint8)
+        return img
 
     def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
         for i in range(epochs):
@@ -95,34 +94,31 @@ def dry_run(cfg: dict):
     print(noise.dim())
     mse = nn.MSELoss()
     optim = Adam(diff.model.parameters(), lr=1e-4)
-    dl = prepare_dataset(dataset_path=cfg['data']['dataset-path'],
-                         img_size=cfg['data']['image-size'],
-                         batch_size=1)
+    dl = setup_dataset(dataset_path=cfg['data']['dataset-path'],
+                       img_size=cfg['data']['image-size'],
+                       batch_size=1)
     epochs = 5
     diff.train(dataloader=dl, optim=optim, lossfunc=mse, epochs=epochs)
     tfwriter.close()
 
 
-def setup_model(model_args: dict):
-    model = UnetV1(channels=model_args['input-channels'],
-                   time_dim=model_args['timestep-embedding-dim'],
-                   device=model_args['device'])
-    return model
-
-
-def setup_diffusion(diffusion_args: dict):
-    diffusion = Diffusion(b_lower=diffusion_args['beta_lower'],
-                          b_upper=diffusion_args['beta_upper'],
-                          steps=diffusion_args['steps'],
-                          device=diffusion_args['device'])
-    return diffusion
-
-
-def setup_writer(cfg: dict):
-    path = os.path.join(cfg['data']['logs-path'], cfg['run_name'])
-    os.mkdir(path)
-    tfwriter = SummaryWriter(log_dir=path)
-    return tfwriter
+def train(cfg: dict):
+    model = setup_model(cfg['model'])
+    diffusion = setup_diffusion(cfg['diffusion'])
+    dl = setup_dataset(dataset_path=cfg['data']['dataset-path'],
+                       img_size=cfg['data']['image-size'],
+                       batch_size=cfg['data']['batch-size'])
+    tfwriter = setup_writer(cfg)
+    diffusionModel = DiffusionUNet(model=model, diffusion=diffusion,
+                                   device=cfg['model']['device'],
+                                   img_size=cfg['data']['image-size'],
+                                   writer=tfwriter)
+    mse = nn.MSELoss()
+    optim = Adam(diffusionModel.model.parameters(),
+                 lr=cfg['model']['lr'])
+    diffusionModel.train(dataloader=dl, optim=optim, lossfunc=mse,
+                         epochs=cfg['model']['epochs'])
+    tfwriter.close()
 
 
 def main():
@@ -135,22 +131,7 @@ def main():
     cfg['run_name'] = args.name
     print(cfg)
     if args.mode == 'train':
-        model = setup_model(cfg['model'])
-        diffusion = setup_diffusion(cfg['diffusion'])
-        dl = prepare_dataset(dataset_path=cfg['data']['dataset-path'],
-                             img_size=cfg['data']['image-size'],
-                             batch_size=cfg['data']['batch-size'])
-        tfwriter = setup_writer(cfg)
-        diffusionModel = DiffusionUNet(model=model, diffusion=diffusion,
-                                       device=cfg['model']['device'],
-                                       img_size=cfg['data']['image-size'],
-                                       writer=tfwriter)
-        mse = nn.MSELoss()
-        optim = Adam(diffusionModel.model.parameters(),
-                     lr=cfg['model']['lr'])
-        diffusionModel.train(dataloader=dl, optim=optim, lossfunc=mse,
-                             epochs=cfg['model']['epochs'])
-        tfwriter.close()
+        train(cfg)
     elif args.mode == 'dry-run':
         dry_run(cfg)
 
