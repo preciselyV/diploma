@@ -140,14 +140,17 @@ def main():
         dl = prepare_dataset(dataset_path=cfg['data']['dataset-path'],
                              img_size=cfg['data']['image-size'],
                              batch_size=cfg['data']['batch-size'])
+        tfwriter = setup_writer(cfg)
         diffusionModel = DiffusionUNet(model=model, diffusion=diffusion,
                                        device=cfg['model']['device'],
-                                       img_size=cfg['data']['image-size'])
+                                       img_size=cfg['data']['image-size'],
+                                       writer=tfwriter)
         mse = nn.MSELoss()
         optim = Adam(diffusionModel.model.parameters(),
                      lr=cfg['model']['lr'])
         diffusionModel.train(dataloader=dl, optim=optim, lossfunc=mse,
                              epochs=cfg['model']['epochs'])
+        tfwriter.close()
     elif args.mode == 'dry-run':
         dry_run(cfg)
 
