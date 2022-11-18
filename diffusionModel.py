@@ -1,3 +1,4 @@
+import os
 from argparse import ArgumentParser
 
 import torch
@@ -6,6 +7,7 @@ from torch.optim import Optimizer, Adam
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from models import UnetV1
 from diffusion import Diffusion
@@ -14,10 +16,11 @@ from utils import prepare_dataset, load_config
 
 class DiffusionUNet:
     def __init__(self, model: nn.Module = None, diffusion: nn.Module = None,
-                 device: str = 'cpu', img_size: int = 256):
+                 device: str = 'cpu', img_size: int = 256, writer: SummaryWriter = None):
 
         self.img_size = img_size
         self.device = device
+        self.writer = writer
         if model is None:
             self.model = UnetV1(channels=3, device=self.device, time_dim=256)
         else:
@@ -64,22 +67,30 @@ class DiffusionUNet:
     def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
         for i in range(epochs):
             print(f"epoch {i}")
+            avg_loss = 0
             for (img, _) in dataloader:
                 t = torch.randint(low=1, high=self.diffusion.steps, size=(dataloader.batch_size,))
-                t = t.to(self.device)
 
+                t = t.to(self.device)
                 img = img.to(self.device)
+
                 imgs, noise = self.diffusion.noise_image(img, t)
+                optim.zero_grad()
                 predicted_noise = self.model(imgs, t)
                 loss = lossfunc(noise, predicted_noise)
+                avg_loss += loss.item()
 
-                optim.zero_grad()
                 loss.backward()
                 optim.step()
+            self.writer.add_scalar('Loss/train', avg_loss / len(dataloader), i)
+            sampled_imgs = self.sample(5).to('cpu')
+            self.writer.add_images('generated_images', sampled_imgs, i)
 
 
 def dry_run(cfg: dict):
-    diff = DiffusionUNet(device=cfg['model']['device'], img_size=cfg['data']['image-size'])
+    tfwriter = setup_writer(cfg)
+    diff = DiffusionUNet(device=cfg['model']['device'], img_size=cfg['data']['image-size'],
+                         writer=tfwriter)
     noise = diff.sample_img(1)
     print(noise.dim())
     mse = nn.MSELoss()
@@ -87,8 +98,9 @@ def dry_run(cfg: dict):
     dl = prepare_dataset(dataset_path=cfg['data']['dataset-path'],
                          img_size=cfg['data']['image-size'],
                          batch_size=1)
-    epochs = 2
+    epochs = 5
     diff.train(dataloader=dl, optim=optim, lossfunc=mse, epochs=epochs)
+    tfwriter.close()
 
 
 def setup_model(model_args: dict):
@@ -106,12 +118,21 @@ def setup_diffusion(diffusion_args: dict):
     return diffusion
 
 
+def setup_writer(cfg: dict):
+    path = os.path.join(cfg['data']['logs-path'], cfg['run_name'])
+    os.mkdir(path)
+    tfwriter = SummaryWriter(log_dir=path)
+    return tfwriter
+
+
 def main():
     argparser = ArgumentParser()
     argparser.add_argument('mode', choices=['dry-run', 'sample', 'train'])
     argparser.add_argument("--config_path", default='configs/conf.yml')
+    argparser.add_argument('--name', default='run_0')
     args = argparser.parse_args()
     cfg = load_config(args.config_path)
+    cfg['run_name'] = args.name
     print(cfg)
     if args.mode == 'train':
         model = setup_model(cfg['model'])
