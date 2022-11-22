@@ -8,6 +8,8 @@ from torch.optim import Optimizer, Adam
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch import Tensor
+from torchmetrics.image.fid import FrechetInceptionDistance
 
 from models import UnetV1
 from diffusion import Diffusion
@@ -19,11 +21,23 @@ class DiffusionUNet:
     def __init__(self, model: nn.Module = None, diffusion: nn.Module = None,
                  device: str = 'cpu', img_size: int = 256, writer: SummaryWriter = None):
 
+        self.fid = FrechetInceptionDistance(feature=192, compute_on_cpu=True)
+        # found a silly big in torchmetrics: all first fid.compute() calls
+        # will result in ValueError. Prolly gonna dig into it later. For now
+        # lets just abuse this bug and make a dummy call, so it won't bother us later
+        try:
+            b = torch.randint(0, 200, (1, 3, 128, 128), dtype=torch.uint8)
+            a = torch.randint(0, 200, (1, 3, 128, 128), dtype=torch.uint8)
+            self.fid.update(a, real=True)
+            self.fid.update(b, real=False)
+            self.fid.compute()
+        except ValueError:
+            pass
         self.img_size = img_size
         self.device = device
         self.writer = writer
         if model is None:
-            self.model = UnetV1(channels=3, device=self.device, time_dim=256)
+            self.model = UnetV1(channels=3, time_dim=256)
         else:
             self.model = model
         self.model = self.model.to(self.device)
@@ -33,12 +47,13 @@ class DiffusionUNet:
             self.diffusion = diffusion
 
     # Algorithm 2 Sampling from DDPM
-    def sample(self, amount: int) -> torch.Tensor:
+    def sample(self, amount: int, x_t: Tensor = None) -> torch.Tensor:
         self.model.eval()
         with torch.no_grad():
-            # this is the noise that we expect to convert to img
-            # now t = T
-            x_t = torch.randn((amount, self.model.channels, self.img_size, self.img_size))
+            if x_t is None:
+                # this is the noise that we expect to convert to img
+                # now t = T
+                x_t = torch.randn((amount, self.model.channels, self.img_size, self.img_size))
             for ind in tqdm(reversed(range(self.diffusion.steps)), total=self.diffusion.steps,
                             desc='sampling'):
                 x_t = x_t.to(self.device)
@@ -60,11 +75,14 @@ class DiffusionUNet:
         self.model.train()
         return x_t
 
-    def sample_img(self, amount: int) -> torch.Tensor:
-        img = self.sample(amount=amount)
-        img = (img.clamp(-1, 1) + 1) / 2
-        img = (img * 255).type(torch.uint8)
-        return img
+    def convert_tensor(self, tens: Tensor) -> Tensor:
+        tens = (tens.clamp(-1, 1) + 1) / 2
+        tens = (tens * 255).type(torch.uint8)
+        return tens
+
+    def sample_img(self, amount: int, noise: Tensor = None) -> torch.Tensor:
+        img = self.sample(amount=amount, x_t=noise)
+        return self.convert_tensor(img)
 
     def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
         for i in range(epochs):
@@ -86,8 +104,24 @@ class DiffusionUNet:
             avg_loss /= len(dataloader)
             logging.info(f'epoch {i} loss is {avg_loss}')
             self.writer.add_scalar('Loss/train', avg_loss, i)
-            sampled_imgs = self.sample(5).to('cpu')
-            self.writer.add_images('generated_images', sampled_imgs, i)
+            self.model.eval()
+            with torch.no_grad():
+
+                sampled_imgs = self.sample(5).to('cpu')
+                self.writer.add_images('generated_images', sampled_imgs, i)
+
+                real_img, _ = next(iter(dataloader))
+                steps = Tensor([self.diffusion.steps-1]).type(torch.long)
+
+                noised, _ = self.diffusion.noise_image(real_img, steps)
+                image = self.sample(1, noised)
+                self.fid.update(self.convert_tensor(real_img), real=True)
+                self.fid.update(self.convert_tensor(image), real=False)
+                val = self.fid.compute()
+                self.writer.add_scalar('Metric/FID', val, i)
+                self.writer.add_images('FID/original', real_img, i)
+                self.writer.add_images('FID/generated', image, i)
+            self.model.train()
 
 
 def dry_run(cfg: dict):
