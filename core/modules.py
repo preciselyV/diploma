@@ -95,7 +95,7 @@ class SinPositionalEncoding(nn.Module):
         self.time_dim = time_dim
         inv_freq = 1.0 / (
             10000
-            ** (torch.arange(0, self.time_dim, 2, device=self.device).float() / self.time_dim)
+            ** (torch.arange(0, self.time_dim, 2).float() / self.time_dim)
         )
         self.register_buffer('inv_freq', inv_freq)
 
