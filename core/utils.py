@@ -16,7 +16,7 @@ def setup_dataset(dataset_path: str, img_size: int = 256, batch_size: int = 1) -
                                                  torchvision.transforms.ToTensor()
                                                  ])
     dataset = torchvision.datasets.ImageFolder(dataset_path, transform=transforms)
-    dl = DataLoader(dataset=dataset, batch_size=batch_size)
+    dl = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
 
     return dl
 
