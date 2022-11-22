@@ -4,11 +4,10 @@ from modules import UpEmb, DownEmb, SinPositionalEncoding
 
 
 class UnetV1(nn.Module):
-    def __init__(self, channels: int, time_dim: int, device: str):
+    def __init__(self, channels: int, time_dim: int):
         super(UnetV1, self).__init__()
 
         self.channels = channels
-        self.device = device
         self.time_dim = time_dim
         self.input = nn.Sequential(
             nn.Conv2d(in_channels=channels, out_channels=64, kernel_size=3, stride=1,
@@ -37,7 +36,7 @@ class UnetV1(nn.Module):
                       padding=1, bias=False),
             nn.ReLU(inplace=True)
         )
-        self.encode = SinPositionalEncoding(time_dim=self.time_dim, device=self.device)
+        self.encode = SinPositionalEncoding(time_dim=self.time_dim)
         self.encode.requires_grad_(False)
 
     def forward(self, x, t):

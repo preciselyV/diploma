@@ -90,17 +90,17 @@ class UpEmb(nn.Module):
 
 
 class SinPositionalEncoding(nn.Module):
-    def __init__(self, time_dim: int, device: str):
+    def __init__(self, time_dim: int):
         super(SinPositionalEncoding, self).__init__()
         self.time_dim = time_dim
-        self.device = device
-
-    def forward(self, t):
         inv_freq = 1.0 / (
             10000
             ** (torch.arange(0, self.time_dim, 2, device=self.device).float() / self.time_dim)
         )
-        pos_enc_a = torch.sin(t.repeat(1, self.time_dim // 2) * inv_freq)
-        pos_enc_b = torch.cos(t.repeat(1, self.time_dim // 2) * inv_freq)
-        pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+        self.register_buffer('inv_freq', inv_freq)
+
+    def forward(self, t):
+        pos_enc_a = torch.sin(t.repeat(1, self.time_dim // 2) * self.inv_freq)
+        pos_enc_b = torch.cos(t.repeat(1, self.time_dim // 2) * self.inv_freq)
+        pos_enc = torch.flatten(torch.stack([pos_enc_a, pos_enc_b], dim=-1), -2, -1)
         return pos_enc
