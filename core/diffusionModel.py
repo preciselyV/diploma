@@ -14,14 +14,16 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 from models import UnetV1
 from diffusion import Diffusion
 from utils import (setup_dataset, load_config, setup_writer, setup_diffusion, setup_model,
-                   setup_logging)
+                   setup_logging, save_model)
 
 
 class DiffusionUNet:
     def __init__(self, model: nn.Module = None, diffusion: nn.Module = None,
-                 device: str = 'cpu', img_size: int = 256, writer: SummaryWriter = None):
+                 device: str = 'cpu', img_size: int = 256, writer: SummaryWriter = None,
+                 cfg: dict = None):
 
         self.fid = FrechetInceptionDistance(feature=192, compute_on_cpu=True)
+        self.data_conf = cfg['data']
         # found a silly big in torchmetrics: all first fid.compute() calls
         # will result in ValueError. Prolly gonna dig into it later. For now
         # lets just abuse this bug and make a dummy call, so it won't bother us later
@@ -121,6 +123,10 @@ class DiffusionUNet:
                 self.writer.add_scalar('Metric/FID', val, i)
                 self.writer.add_images('FID/original', real_img, i)
                 self.writer.add_images('FID/generated', image, i)
+
+            if i % 25 == 0 and i > 100:
+                save_model(self.model, self.data_conf['checkpoints-path'])
+
             self.model.train()
 
 

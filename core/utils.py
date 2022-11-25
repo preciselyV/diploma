@@ -2,7 +2,9 @@ import os
 import logging
 
 import torchvision
+import torch
 from torch.utils.data import DataLoader
+import torch.nn as nn
 from PIL import Image
 import yaml
 from torch.utils.tensorboard import SummaryWriter
@@ -72,3 +74,8 @@ def setup_logging(cfg: dict):
         level=cfg['logging']['log_level'],
         format=cfg['logging']['log_format']
     )
+
+
+def save_model(model: nn.Module, path: str):
+    model.eval()
+    torch.save(model.state_dict(), path)
