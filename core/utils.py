@@ -49,8 +49,7 @@ def load_config(conf_path: str):
 
 def setup_model(model_args: dict):
     model = UnetV1(channels=model_args['input-channels'],
-                   time_dim=model_args['timestep-embedding-dim'],
-                   device=model_args['device'])
+                   time_dim=model_args['timestep-embedding-dim'])
     return model
 
 
