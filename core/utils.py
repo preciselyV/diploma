@@ -75,5 +75,6 @@ def setup_logging(cfg: dict):
     )
 
 
-def save_model(model: nn.Module, path: str):
-    torch.save(model.state_dict(), path)
+def save_model(model: nn.Module, path: str, run_name: str, epoch: int):
+    full_path = os.path.join(path, f'{run_name}_{epoch}.pt')
+    torch.save(model.state_dict(), full_path)

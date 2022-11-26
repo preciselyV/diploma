@@ -38,6 +38,7 @@ class DiffusionUNet:
             pass
 
         self.data_conf = cfg['data']
+        self.run_name = cfg['run_name']
         self.img_size = img_size
         self.writer = writer
         if model is None:
@@ -129,9 +130,9 @@ class DiffusionUNet:
                 self.writer.add_images('FID/original', real_img, i)
                 self.writer.add_images('FID/generated', image, i)
 
-            if i % 25 == 0 and i > 100:
+            if i % 10 == 0:
                 self.model = self.model.to('cpu')
-                save_model(self.model, self.data_conf['checkpoints-path'])
+                save_model(self.model, self.data_conf['checkpoints-path'], self.run_name, i)
                 self.model = self.model.to(self.device)
 
             self.model.train()
