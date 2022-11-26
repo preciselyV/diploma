@@ -75,8 +75,8 @@ class DiffusionUNet:
                 else:
                     z = torch.zeros_like(x_t)
 
-                x_t = ((1 / torch.sqrt(alpha_hat))
-                       * (x_t - ((1-alpha)/(torch.sqrt(1-alpha))) * pred_noise)) + z * sigma
+                x_t = ((1 / torch.sqrt(alpha))
+                       * (x_t - ((1-alpha)/(torch.sqrt(1-alpha_hat))) * pred_noise)) + z * sigma
         self.model.train()
         return x_t
 
@@ -121,7 +121,7 @@ class DiffusionUNet:
                 real_img = real_img.to(self.device)
                 steps = steps.to(self.device)
                 noised, _ = self.diffusion.noise_image(real_img, steps)
-                image = self.sample(1, noised)
+                image = self.sample(noised.shape[0], noised)
                 image = image.to(self.device)
                 self.fid.update(self.convert_tensor(real_img), real=True)
                 self.fid.update(self.convert_tensor(image), real=False)
