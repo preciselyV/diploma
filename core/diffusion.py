@@ -10,7 +10,8 @@ class Diffusion:
         self.device = device
 
         # a stands for alpha in DDPM paper
-        self.a = 1. - torch.linspace(self.b_lower, self.b_upper, self.steps)
+        self.beta = torch.linspace(self.b_lower, self.b_upper, self.steps).to(self.device)
+        self.a = 1. - self.beta
         self.a = self.a.to(self.device)
         # cumulative product of all a. We'll need it to calculate noise
         self.a_hat = torch.cumprod(self.a, dim=0)

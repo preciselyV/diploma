@@ -66,7 +66,7 @@ class DiffusionUNet:
                 alpha_hat = self.diffusion.a_hat[t][:, None, None, None]
                 # "Experimentally, both σ^2_t = βt and
                 # σ^2_t = β˜t = (1−α(t−1)/1−αt) * βt had similar results"
-                beta = self.diffusion.a_hat[t][:, None, None, None]
+                beta = self.diffusion.beta[t][:, None, None, None]
                 sigma = torch.sqrt(beta)
                 pred_noise = self.model(x_t, t)
                 if ind > 1:
