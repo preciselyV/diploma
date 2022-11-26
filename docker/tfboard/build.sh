@@ -1,5 +1,5 @@
 #!/bin/bash
 
-img=tfboard
+img=diffusion-tfboard
 
 docker build -t $img -f ./Dockerfile .
