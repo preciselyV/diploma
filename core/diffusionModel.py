@@ -92,7 +92,7 @@ class DiffusionUNet:
         for i in range(epochs):
             avg_loss = 0
             for (img, _) in tqdm(dataloader, desc='epoch Progress'):
-                t = torch.randint(low=1, high=self.diffusion.steps, size=(dataloader.batch_size,))
+                t = torch.randint(low=1, high=self.diffusion.steps, size=(img.shape[0],))
 
                 t = t.to(self.device)
                 img = img.to(self.device)
