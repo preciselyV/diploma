@@ -22,21 +22,23 @@ class DiffusionUNet:
                  device: str = 'cpu', img_size: int = 256, writer: SummaryWriter = None,
                  cfg: dict = None):
 
-        self.fid = FrechetInceptionDistance(feature=192, compute_on_cpu=True)
-        self.data_conf = cfg['data']
+        self.device = device
+        self.fid = FrechetInceptionDistance(feature=192).to(self.device)
+
         # found a silly big in torchmetrics: all first fid.compute() calls
         # will result in ValueError. Prolly gonna dig into it later. For now
         # lets just abuse this bug and make a dummy call, so it won't bother us later
         try:
-            b = torch.randint(0, 200, (1, 3, 128, 128), dtype=torch.uint8)
-            a = torch.randint(0, 200, (1, 3, 128, 128), dtype=torch.uint8)
+            b = torch.randint(0, 200, (1, 3, 128, 128), dtype=torch.uint8).to(self.device)
+            a = torch.randint(0, 200, (1, 3, 128, 128), dtype=torch.uint8).to(self.device)
             self.fid.update(a, real=True)
             self.fid.update(b, real=False)
             self.fid.compute()
         except ValueError:
             pass
+
+        self.data_conf = cfg['data']
         self.img_size = img_size
-        self.device = device
         self.writer = writer
         if model is None:
             self.model = UnetV1(channels=3, time_dim=256)
@@ -73,7 +75,7 @@ class DiffusionUNet:
                     z = torch.zeros_like(x_t)
 
                 x_t = ((1 / torch.sqrt(alpha_hat))
-                       * (x_t - (1-alpha)/(torch.sqrt(1-alpha)) * pred_noise)) + z * sigma
+                       * (x_t - ((1-alpha)/(torch.sqrt(1-alpha))) * pred_noise)) + z * sigma
         self.model.train()
         return x_t
 
@@ -109,14 +111,17 @@ class DiffusionUNet:
             self.model.eval()
             with torch.no_grad():
 
-                sampled_imgs = self.sample(5).to('cpu')
+                sampled_imgs = self.sample_img(5).to('cpu')
                 self.writer.add_images('generated_images', sampled_imgs, i)
 
                 real_img, _ = next(iter(dataloader))
                 steps = Tensor([self.diffusion.steps-1]).type(torch.long)
 
+                real_img = real_img.to(self.device)
+                steps = steps.to(self.device)
                 noised, _ = self.diffusion.noise_image(real_img, steps)
                 image = self.sample(1, noised)
+                image = image.to(self.device)
                 self.fid.update(self.convert_tensor(real_img), real=True)
                 self.fid.update(self.convert_tensor(image), real=False)
                 val = self.fid.compute()
@@ -125,7 +130,9 @@ class DiffusionUNet:
                 self.writer.add_images('FID/generated', image, i)
 
             if i % 25 == 0 and i > 100:
+                self.model = self.model.to('cpu')
                 save_model(self.model, self.data_conf['checkpoints-path'])
+                self.model = self.model.to(self.device)
 
             self.model.train()
 
@@ -133,7 +140,7 @@ class DiffusionUNet:
 def dry_run(cfg: dict):
     tfwriter = setup_writer(cfg)
     diff = DiffusionUNet(device=cfg['model']['device'], img_size=cfg['data']['image-size'],
-                         writer=tfwriter)
+                         writer=tfwriter, cfg=cfg)
     noise = diff.sample_img(1)
     print(noise.dim())
     mse = nn.MSELoss()
@@ -156,7 +163,7 @@ def train(cfg: dict):
     diffusionModel = DiffusionUNet(model=model, diffusion=diffusion,
                                    device=cfg['model']['device'],
                                    img_size=cfg['data']['image-size'],
-                                   writer=tfwriter)
+                                   writer=tfwriter, cfg=cfg)
     mse = nn.MSELoss()
     optim = Adam(diffusionModel.model.parameters(),
                  lr=cfg['model']['lr'])

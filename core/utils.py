@@ -77,5 +77,4 @@ def setup_logging(cfg: dict):
 
 
 def save_model(model: nn.Module, path: str):
-    model.eval()
     torch.save(model.state_dict(), path)
