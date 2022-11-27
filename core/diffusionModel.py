@@ -59,7 +59,7 @@ class DiffusionUNet:
                 # this is the noise that we expect to convert to img
                 # now t = T
                 x_t = torch.randn((amount, self.model.channels, self.img_size, self.img_size))
-            for ind in tqdm(reversed(range(self.diffusion.steps)), total=self.diffusion.steps,
+            for ind in tqdm(reversed(range(1, self.diffusion.steps)), total=self.diffusion.steps,
                             desc='sampling'):
                 x_t = x_t.to(self.device)
                 t = (torch.ones(amount) * ind).long().to(self.device)
@@ -92,7 +92,7 @@ class DiffusionUNet:
     def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
         for i in range(epochs):
             avg_loss = 0
-            for (img, _) in tqdm(dataloader, desc='epoch Progress'):
+            for (step, (img, _)) in enumerate(tqdm(dataloader, desc='epoch Progress')):
                 t = torch.randint(low=1, high=self.diffusion.steps, size=(img.shape[0],))
 
                 t = t.to(self.device)
@@ -106,9 +106,11 @@ class DiffusionUNet:
 
                 loss.backward()
                 optim.step()
+
+                self.writer.add_scalar('Loss/train', loss.item(), i*len(dataloader)+step)
+
             avg_loss /= len(dataloader)
             logging.info(f'epoch {i} loss is {avg_loss}')
-            self.writer.add_scalar('Loss/train', avg_loss, i)
             self.model.eval()
             with torch.no_grad():
 
@@ -116,11 +118,10 @@ class DiffusionUNet:
                 self.writer.add_images('generated_images', sampled_imgs, i)
 
                 real_img, _ = next(iter(dataloader))
-                steps = Tensor([self.diffusion.steps-1]).type(torch.long)
-
+                timesteps = (torch.ones((real_img.shape[0])) * (self.diffusion.steps - 1)).long()
                 real_img = real_img.to(self.device)
-                steps = steps.to(self.device)
-                noised, _ = self.diffusion.noise_image(real_img, steps)
+                timesteps = timesteps.to(self.device)
+                noised, _ = self.diffusion.noise_image(real_img, timesteps)
                 image = self.sample(noised.shape[0], noised)
                 image = image.to(self.device)
                 self.fid.update(self.convert_tensor(real_img), real=True)
@@ -148,7 +149,7 @@ def dry_run(cfg: dict):
     optim = Adam(diff.model.parameters(), lr=1e-4)
     dl = setup_dataset(dataset_path=cfg['data']['dataset-path'],
                        img_size=cfg['data']['image-size'],
-                       batch_size=1)
+                       batch_size=2)
     epochs = 5
     diff.train(dataloader=dl, optim=optim, lossfunc=mse, epochs=epochs)
     tfwriter.close()
