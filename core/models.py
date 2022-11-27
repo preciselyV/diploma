@@ -1,3 +1,4 @@
+import logging 
 import torch
 import torch.nn as nn
 from modules import UpEmb, DownEmb, SinPositionalEncoding
@@ -21,12 +22,17 @@ class UnetV1(nn.Module):
         self.down1 = DownEmb(in_channels=64, out_channels=128, time_dim=self.time_dim)
         self.down2 = DownEmb(in_channels=128, out_channels=256, time_dim=self.time_dim)
         self.down3 = DownEmb(in_channels=256, out_channels=512, time_dim=self.time_dim)
-        self.down4 = DownEmb(in_channels=512, out_channels=1024, time_dim=self.time_dim)
 
-        self.up1 = UpEmb(in_channels=1024, out_channels=512, time_dim=self.time_dim)
-        self.up2 = UpEmb(in_channels=512, out_channels=256, time_dim=self.time_dim)
-        self.up3 = UpEmb(in_channels=256, out_channels=128, time_dim=self.time_dim)
-        self.up4 = UpEmb(in_channels=128, out_channels=64, time_dim=self.time_dim)
+        self.bottleneck = nn.Sequential(
+            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.up1 = UpEmb(in_channels=512, out_channels=256, time_dim=self.time_dim)
+        self.up2 = UpEmb(in_channels=256, out_channels=128, time_dim=self.time_dim)
+        self.up3 = UpEmb(in_channels=128, out_channels=64, time_dim=self.time_dim)
 
         self.output = nn.Sequential(
             nn.Conv2d(in_channels=64, out_channels=channels, kernel_size=3, stride=1,
@@ -46,18 +52,17 @@ class UnetV1(nn.Module):
         x2 = self.down1(x1, t)
         x3 = self.down2(x2, t)
         x4 = self.down3(x3, t)
-        x5 = self.down4(x4, t)
-        x = self.up1(x5, x4, t)
-        x = self.up2(x, x3, t)
-        x = self.up3(x, x2, t)
-        x = self.up4(x, x1, t)
+        x4 = self.bottleneck(x4)
+        x = self.up1(x4, x3, t)
+        x = self.up2(x, x2, t)
+        x = self.up3(x, x1, t)
         x = self.output(x)
         return x
 
 
 def main():
-    model = UnetV1(channels=3, time_dim=256, device='cuda').to('cuda')
-    minibatch = torch.randn(3, 3, 128, 128).to('cuda')
+    model = UnetV1(channels=3, time_dim=256).to('cuda')
+    minibatch = torch.randn(3, 3, 64, 64).to('cuda')
     ts = torch.tensor([228] * minibatch.shape[0], dtype=torch.long).to('cuda')
     model.eval()
     # yeah... OS is killing the process as it is drainig all of the
