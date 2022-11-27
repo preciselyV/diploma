@@ -97,7 +97,7 @@ class SinPositionalEncoding(nn.Module):
             10000
             ** (torch.arange(0, self.time_dim, 2).float() / self.time_dim)
         )
-        self.register_buffer('inv_freq', inv_freq)
+        self.register_buffer('inv_freq', inv_freq, persistent=False)
 
     def forward(self, t):
         pos_enc_a = torch.sin(t.repeat(1, self.time_dim // 2) * self.inv_freq)
