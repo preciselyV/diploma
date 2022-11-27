@@ -1,4 +1,3 @@
-import logging 
 import torch
 import torch.nn as nn
 from modules import UpEmb, DownEmb, SinPositionalEncoding

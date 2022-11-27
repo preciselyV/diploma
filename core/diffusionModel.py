@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 
 import torch
 import torch.nn as nn
-from torch.optim import Optimizer, Adam
+from torch.optim import Optimizer, AdamW
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -146,7 +146,7 @@ def dry_run(cfg: dict):
     noise = diff.sample_img(1)
     print(noise.dim())
     mse = nn.MSELoss()
-    optim = Adam(diff.model.parameters(), lr=1e-4)
+    optim = AdamW(diff.model.parameters(), lr=1e-4)
     dl = setup_dataset(dataset_path=cfg['data']['dataset-path'],
                        img_size=cfg['data']['image-size'],
                        batch_size=2)
@@ -167,8 +167,8 @@ def train(cfg: dict):
                                    img_size=cfg['data']['image-size'],
                                    writer=tfwriter, cfg=cfg)
     mse = nn.MSELoss()
-    optim = Adam(diffusionModel.model.parameters(),
-                 lr=cfg['model']['lr'])
+    optim = AdamW(diffusionModel.model.parameters(),
+                  lr=cfg['model']['lr'])
     diffusionModel.train(dataloader=dl, optim=optim, lossfunc=mse,
                          epochs=cfg['model']['epochs'])
     tfwriter.close()
