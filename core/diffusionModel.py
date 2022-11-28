@@ -92,7 +92,7 @@ class DiffusionUNet:
     def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
         for i in range(epochs):
             avg_loss = 0
-            for (step, (img, _)) in enumerate(tqdm(dataloader, desc='epoch Progress')):
+            for (img, _) in tqdm(dataloader, desc='epoch Progress'):
                 t = torch.randint(low=1, high=self.diffusion.steps, size=(img.shape[0],))
 
                 t = t.to(self.device)
@@ -107,9 +107,8 @@ class DiffusionUNet:
                 loss.backward()
                 optim.step()
 
-                self.writer.add_scalar('Loss/train', loss.item(), i*len(dataloader)+step)
-
             avg_loss /= len(dataloader)
+            self.writer.add_scalar('Loss/train', avg_loss, i)
             logging.info(f'epoch {i} loss is {avg_loss}')
             self.model.eval()
             with torch.no_grad():
