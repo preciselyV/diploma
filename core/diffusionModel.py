@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch import Tensor
 from torchmetrics.image.fid import FrechetInceptionDistance
+from torch.optim.lr_scheduler import CyclicLR, _LRScheduler
 
 from models import UnetV1
 from diffusion import Diffusion
@@ -38,6 +39,7 @@ class DiffusionUNet:
             pass
 
         self.data_conf = cfg['data']
+        self.model_conf = cfg['model']
         self.run_name = cfg['run_name']
         self.img_size = img_size
         self.writer = writer
@@ -90,6 +92,77 @@ class DiffusionUNet:
         return self.convert_tensor(img)
 
     def train(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int):
+        mixed_precision = self.model_conf.get('mixed_precision', False)
+        scheduler = None
+        if self.model_conf.get('cyclicLR', False):
+            max_lr = self.model_conf.get('max_lr')
+            base_lr = self.model_conf.get('lr')
+            scheduler = CyclicLR(optimizer=optim, base_lr=base_lr, max_lr=max_lr,
+                                 step_size_up=len(dataloader), cycle_momentum=False)
+        if mixed_precision:
+            self.train_mixed(dataloader, optim, lossfunc, epochs, scheduler)
+        else:
+            self.train_(dataloader, optim, lossfunc, epochs, scheduler)
+
+    def write_metrics(self, avg_loss: int, dataloader: DataLoader, epoch: int):
+        self.writer.add_scalar('Loss/train', avg_loss, epoch)
+        logging.info(f'epoch {epoch} loss is {avg_loss}')
+        self.model.eval()
+
+        with torch.no_grad():
+            sampled_imgs = self.sample_img(5).to('cpu')
+            self.writer.add_images('generated_images', sampled_imgs, epoch)
+            real_img, _ = next(iter(dataloader))
+            timesteps = (torch.ones((real_img.shape[0])) * (self.diffusion.steps - 1)).long()
+            real_img = real_img.to(self.device)
+            timesteps = timesteps.to(self.device)
+            noised, _ = self.diffusion.noise_image(real_img, timesteps)
+            image = self.sample(noised.shape[0], noised)
+            image = image.to(self.device)
+            self.fid.update(self.convert_tensor(real_img), real=True)
+            self.fid.update(self.convert_tensor(image), real=False)
+            val = self.fid.compute()
+            self.writer.add_scalar('Metric/FID', val, epoch)
+            self.writer.add_images('FID/original', real_img, epoch)
+            self.writer.add_images('FID/generated', image, epoch)
+
+        self.model.train()
+
+    def train_mixed(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module,
+                    epochs: int, scheduler: _LRScheduler = None):
+        scaler = torch.cuda.amp.GradScaler()
+        for i in range(epochs):
+            avg_loss = 0
+            for (img, _) in tqdm(dataloader, desc='epoch Progress'):
+                t = torch.randint(low=1, high=self.diffusion.steps, size=(img.shape[0],))
+
+                t = t.to(self.device)
+                img = img.to(self.device)
+
+                imgs, noise = self.diffusion.noise_image(img, t)
+                optim.zero_grad()
+                with torch.cuda.amp.autocast():
+                    predicted_noise = self.model(imgs, t)
+                    loss = lossfunc(noise, predicted_noise)
+                scaler.scale(loss).backward()
+                avg_loss += loss.detach().cpu().item()
+                scaler.step(optim)
+                scaler.update()
+                if scheduler is not None:
+                    scheduler.step()
+
+            avg_loss /= len(dataloader)
+            self.write_metrics(avg_loss=avg_loss, dataloader=dataloader, epoch=i)
+
+            if i % 10 == 0:
+                self.model = self.model.to('cpu')
+                self.model.eval()
+                save_model(self.model, self.data_conf['checkpoints-path'], self.run_name, i)
+                self.model = self.model.to(self.device)
+                self.model.train()
+
+    def train_(self, dataloader: DataLoader, optim: Optimizer, lossfunc: nn.Module, epochs: int,
+               scheduler: _LRScheduler = None):
         for i in range(epochs):
             avg_loss = 0
             for (img, _) in tqdm(dataloader, desc='epoch Progress'):
@@ -108,34 +181,14 @@ class DiffusionUNet:
                 optim.step()
 
             avg_loss /= len(dataloader)
-            self.writer.add_scalar('Loss/train', avg_loss, i)
-            logging.info(f'epoch {i} loss is {avg_loss}')
-            self.model.eval()
-            with torch.no_grad():
-
-                sampled_imgs = self.sample_img(5).to('cpu')
-                self.writer.add_images('generated_images', sampled_imgs, i)
-
-                real_img, _ = next(iter(dataloader))
-                timesteps = (torch.ones((real_img.shape[0])) * (self.diffusion.steps - 1)).long()
-                real_img = real_img.to(self.device)
-                timesteps = timesteps.to(self.device)
-                noised, _ = self.diffusion.noise_image(real_img, timesteps)
-                image = self.sample(noised.shape[0], noised)
-                image = image.to(self.device)
-                self.fid.update(self.convert_tensor(real_img), real=True)
-                self.fid.update(self.convert_tensor(image), real=False)
-                val = self.fid.compute()
-                self.writer.add_scalar('Metric/FID', val, i)
-                self.writer.add_images('FID/original', real_img, i)
-                self.writer.add_images('FID/generated', image, i)
+            self.write_metrics(avg_loss=avg_loss, dataloader=dataloader, epoch=i)
 
             if i % 10 == 0:
                 self.model = self.model.to('cpu')
+                self.model.eval()
                 save_model(self.model, self.data_conf['checkpoints-path'], self.run_name, i)
                 self.model = self.model.to(self.device)
-
-            self.model.train()
+                self.model.train()
 
 
 def dry_run(cfg: dict):

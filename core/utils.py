@@ -42,6 +42,8 @@ def load_config(conf_path: str):
     with open(conf_path, "r") as f:
         cfg = yaml.safe_load(f.read())
     cfg['model']['lr'] = float(cfg['model']['lr'])
+    if cfg['model'].get('max_lr', False):
+        cfg['model']['max_lr'] = float(cfg['model']['max_lr'])
     cfg['diffusion']['beta_upper'] = float(cfg['diffusion']['beta_upper'])
     cfg['diffusion']['beta_lower'] = float(cfg['diffusion']['beta_lower'])
     return cfg
