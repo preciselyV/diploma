@@ -13,9 +13,15 @@ from models import UnetV1
 from diffusion import Diffusion
 
 
+class RescaleChannels(object):
+    def __call__(self, batch):
+        return batch * 2 - 1
+
+
 def setup_dataset(dataset_path: str, img_size: int = 256, batch_size: int = 1) -> DataLoader:
     transforms = torchvision.transforms.Compose([torchvision.transforms.Resize(img_size),
-                                                 torchvision.transforms.ToTensor()
+                                                 torchvision.transforms.ToTensor(),
+                                                 RescaleChannels()
                                                  ])
     dataset = torchvision.datasets.ImageFolder(dataset_path, transform=transforms)
     dl = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
