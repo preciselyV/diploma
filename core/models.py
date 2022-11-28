@@ -36,10 +36,8 @@ class UnetV1(nn.Module):
         self.output = nn.Sequential(
             nn.Conv2d(in_channels=64, out_channels=channels, kernel_size=3, stride=1,
                       padding=1, bias=False),
-            nn.GELU(),
             nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3,
                       padding=1, bias=False),
-            nn.GELU()
         )
         self.encode = SinPositionalEncoding(time_dim=self.time_dim)
         self.encode.requires_grad_(False)
