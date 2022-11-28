@@ -9,13 +9,13 @@ class Down(nn.Module):
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=1,
                       padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1,
                       padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
         self.maxPool = nn.MaxPool2d(2)
 
@@ -31,8 +31,8 @@ class DownEmb(nn.Module):
         super(DownEmb, self).__init__()
         self.down = Down(in_channels=in_channels, out_channels=out_channels)
         self.emb = nn.Sequential(
-            nn.Linear(in_features=time_dim, out_features=out_channels),
-            nn.SiLU()
+            nn.SiLU(),
+            nn.Linear(in_features=time_dim, out_features=out_channels)
         )
 
     def forward(self, x, t):
@@ -49,17 +49,17 @@ class Up(nn.Module):
         self.tconv1 = nn.Sequential(
             nn.ConvTranspose2d(in_channels=in_channels, out_channels=in_channels // 2,
                                kernel_size=2, stride=2),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3,
                       padding=1, bias=False),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1,
                       padding=1, bias=False),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
 
     def forward(self, x, residual):
@@ -79,8 +79,8 @@ class UpEmb(nn.Module):
         self.up = Up(in_channels=in_channels, out_channels=out_channels)
 
         self.emb = nn.Sequential(
-            nn.Linear(in_features=time_dim, out_features=out_channels),
-            nn.SELU()
+            nn.SiLU(),
+            nn.Linear(in_features=time_dim, out_features=out_channels)
         )
 
     def forward(self, x, residual, t):

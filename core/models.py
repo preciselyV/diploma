@@ -12,10 +12,10 @@ class UnetV1(nn.Module):
         self.input = nn.Sequential(
             nn.Conv2d(in_channels=channels, out_channels=64, kernel_size=3, stride=1,
                       padding=1, bias=False),
-            nn.ReLU(inplace=True),
+            nn.GELU(),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1,
                       padding=1, bias=False),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
 
         self.down1 = DownEmb(in_channels=64, out_channels=128, time_dim=self.time_dim)
@@ -24,9 +24,9 @@ class UnetV1(nn.Module):
 
         self.bottleneck = nn.Sequential(
             nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
+            nn.GELU(),
             nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
 
         self.up1 = UpEmb(in_channels=512, out_channels=256, time_dim=self.time_dim)
@@ -36,10 +36,10 @@ class UnetV1(nn.Module):
         self.output = nn.Sequential(
             nn.Conv2d(in_channels=64, out_channels=channels, kernel_size=3, stride=1,
                       padding=1, bias=False),
-            nn.ReLU(inplace=True),
+            nn.GELU(),
             nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3,
                       padding=1, bias=False),
-            nn.ReLU(inplace=True)
+            nn.GELU()
         )
         self.encode = SinPositionalEncoding(time_dim=self.time_dim)
         self.encode.requires_grad_(False)
