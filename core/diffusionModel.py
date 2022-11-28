@@ -104,13 +104,14 @@ class DiffusionUNet:
         else:
             self.train_(dataloader, optim, lossfunc, epochs, scheduler)
 
-    def write_metrics(self, avg_loss: int, dataloader: DataLoader, epoch: int):
+    def write_metrics(self, avg_loss: int, dataloader: DataLoader, epoch: int, lr: int):
         self.writer.add_scalar('Loss/train', avg_loss, epoch)
+        self.writer.add_scalar('LearningRate', lr, epoch)
         logging.info(f'epoch {epoch} loss is {avg_loss}')
         self.model.eval()
 
         with torch.no_grad():
-            sampled_imgs = self.sample_img(5).to('cpu')
+            sampled_imgs = self.sample(16).to('cpu')
             self.writer.add_images('generated_images', sampled_imgs, epoch)
             real_img, _ = next(iter(dataloader))
             timesteps = (torch.ones((real_img.shape[0])) * (self.diffusion.steps - 1)).long()
@@ -152,7 +153,8 @@ class DiffusionUNet:
                     scheduler.step()
 
             avg_loss /= len(dataloader)
-            self.write_metrics(avg_loss=avg_loss, dataloader=dataloader, epoch=i)
+            self.write_metrics(avg_loss=avg_loss, dataloader=dataloader, epoch=i,
+                               lr=optim.param_groups[0]['lr'])
 
             if i % 10 == 0:
                 self.model = self.model.to('cpu')
@@ -181,7 +183,8 @@ class DiffusionUNet:
                 optim.step()
 
             avg_loss /= len(dataloader)
-            self.write_metrics(avg_loss=avg_loss, dataloader=dataloader, epoch=i)
+            self.write_metrics(avg_loss=avg_loss, dataloader=dataloader, epoch=i,
+                               lr=optim.param_groups[0]['lr'])
 
             if i % 10 == 0:
                 self.model = self.model.to('cpu')
