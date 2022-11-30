@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch import Tensor
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torch.optim.lr_scheduler import CyclicLR, _LRScheduler
+from torchvision.utils import save_image
 
 from models import UnetV1
 from diffusion import Diffusion
@@ -83,8 +84,7 @@ class DiffusionUNet:
         return x_t
 
     def convert_tensor(self, tens: Tensor) -> Tensor:
-        tens = (tens.clamp(-1, 1) + 1) / 2
-        tens = (tens * 255).type(torch.uint8)
+        tens = (tens + 1) / 2
         return tens
 
     def sample_img(self, amount: int, noise: Tensor = None) -> torch.Tensor:
@@ -229,11 +229,26 @@ def train(cfg: dict):
     tfwriter.close()
 
 
+def sample(cfg: dict):
+    model = setup_model(cfg['model'])
+    model.load_state_dict(torch.load(cfg['checkpoint_path']))
+    model.eval()
+    diffusion = setup_diffusion(cfg['diffusion'])
+    diffusionModel = DiffusionUNet(model=model, diffusion=diffusion,
+                                   device=cfg['model']['device'],
+                                   img_size=cfg['data']['image-size'],
+                                   cfg=cfg)
+    imgs = diffusionModel.sample_img(cfg['data']['batch-size'])
+    save_image(imgs, cfg['save_path'])
+
+
 def main():
     argparser = ArgumentParser()
     argparser.add_argument('mode', choices=['dry-run', 'sample', 'train'])
     argparser.add_argument("--config_path", default='configs/conf.yml')
     argparser.add_argument('--name', default='run_0')
+    argparser.add_argument('--checkpoint_path', default='')
+    argparser.add_argument('--save_path', default='')
     args = argparser.parse_args()
     cfg = load_config(args.config_path)
     cfg['run_name'] = args.name
@@ -245,6 +260,11 @@ def main():
     elif args.mode == 'dry-run':
         logging.info('running in dry-run mode')
         dry_run(cfg)
+    elif args.mode == 'sample':
+        logging.info('running in sample mode')
+        cfg['checkpoint_path'] = args.checkpoint_path
+        cfg['save_path'] = args.save_path
+        sample(cfg)
 
 
 if __name__ == '__main__':
